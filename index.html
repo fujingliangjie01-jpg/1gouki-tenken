@@ -27,7 +27,7 @@ h1{text-align:center;margin:8px 0 20px;font-size:30px}.card{background:#18181b;b
 .camera-title{text-align:center;font-size:24px;font-weight:900;padding:8px 0 10px}
 .camera-box{position:relative;overflow:hidden;border-radius:16px;background:#111}
 video{display:block;width:100%;height:min(68vh,650px);min-height:420px;object-fit:cover;background:#000}
-/* File No.13: 機種読み取り枠を大幅拡大 */
+/* File No.14: 機種読み取り枠を大幅拡大 */
 .scan-frame{position:absolute;left:2%;right:2%;top:12%;height:76%;border:4px solid #0a84ff;border-radius:16px;pointer-events:none;box-shadow:0 0 0 1px rgba(255,255,255,.18) inset}
 .scan-frame.code{left:4%;right:4%;top:10%;height:80%}
 .guide{position:absolute;top:18px;left:12px;right:12px;text-align:center;font-weight:900;text-shadow:0 1px 5px #000}
@@ -40,7 +40,7 @@ video{display:block;width:100%;height:min(68vh,650px);min-height:420px;object-fi
 </style>
 </head>
 <body>
-<div class="file-no">File No.13</div>
+<div class="file-no">File No.14</div>
 
 <section id="startScreen" class="screen">
 <div class="start-box">
@@ -91,9 +91,12 @@ video{display:block;width:100%;height:min(68vh,650px);min-height:420px;object-fi
 <canvas id="canvas"></canvas>
 
 <script>
-const MODEL_KEY="kirikae_model_confirmed_v13";
-const CODE_KEY="kirikae_code_confirmed_v13";
+const MODEL_KEY="kirikae_model_confirmed_v14";
+const CODE_KEY="kirikae_code_confirmed_v14";
 const MODEL_PATTERN=/[A-Z][0-9]{3}[A-Z]{1,3}/g;
+/* File No.14: 正規機種リスト。今後ここへ追加可能 */
+const MODEL_LIST=["T629C"];
+const MODEL_MAX_DISTANCE=2;
 const $=id=>document.getElementById(id);
 const startScreen=$("startScreen"),cameraScreen=$("cameraScreen"),inspectionScreen=$("inspectionScreen");
 const video=$("video"),canvas=$("canvas"),scanFrame=$("scanFrame"),guide=$("guide"),cameraTitle=$("cameraTitle");
@@ -118,7 +121,7 @@ async function openCamera(mode){
  if(cameraStarting)return;cameraStarting=true;stopCamera();currentMode=mode;lastCandidate="";lastCandidateAt=0;
  candidate.textContent="-";helpText.textContent="";retryCamera.classList.add("hidden");completeOverlay.classList.remove("show");
  if(mode==="code"){cameraTitle.textContent="コード確認";guide.textContent="QRコード全体を青枠内に入れてください";scanFrame.classList.add("code")}
- else{cameraTitle.textContent="機種読み込み";guide.textContent="青枠にラベル全体（バーコード＋機種文字）を入れてください";scanFrame.classList.remove("code")}
+ else{cameraTitle.textContent="機種読み込み";guide.textContent="青枠にラベル全体を入れてください（登録機種：T629C）";scanFrame.classList.remove("code")}
  showOnly(cameraScreen);cameraStatus.classList.remove("error");cameraStatus.textContent="カメラ起動中…";
  try{
   if(!window.isSecureContext)throw new Error("NOT_SECURE");
@@ -143,7 +146,38 @@ async function prepareBarcode(){
  const f=p.filter(x=>s.includes(x));barcodeDetector=new BarcodeDetector(f.length?{formats:f}:undefined)}catch(e){}
 }
 function normalizeText(t){return String(t).toUpperCase().replace(/\s+/g,"").replace(/[^A-Z0-9]/g,"")}
-function extractModel(t){const m=normalizeText(t).match(MODEL_PATTERN);if(!m)return null;m.sort((a,b)=>b.length-a.length);return m[0]}
+function levenshtein(a,b){
+ const m=a.length,n=b.length,d=Array.from({length:m+1},()=>Array(n+1).fill(0));
+ for(let i=0;i<=m;i++)d[i][0]=i;
+ for(let j=0;j<=n;j++)d[0][j]=j;
+ for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)d[i][j]=Math.min(
+  d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1)
+ );
+ return d[m][n]
+}
+function correctFromModelList(raw){
+ const s=normalizeText(raw);if(!s)return null;
+ /* 完全一致は最優先 */
+ for(const model of MODEL_LIST)if(s.includes(model))return {value:model,distance:0};
+ /* OCR全文の中から登録機種と同じ長さ付近を切り出して近似比較 */
+ let best=null;
+ for(const model of MODEL_LIST){
+  const minLen=Math.max(3,model.length-1),maxLen=model.length+1;
+  for(let len=minLen;len<=maxLen;len++){
+   if(s.length<len)continue;
+   for(let i=0;i<=s.length-len;i++){
+    const part=s.slice(i,i+len),dist=levenshtein(part,model);
+    if(!best||dist<best.distance)best={value:model,distance:dist,raw:part};
+   }
+  }
+ }
+ return best&&best.distance<=MODEL_MAX_DISTANCE?best:null
+}
+function extractModel(t){
+ const fixed=correctFromModelList(t);
+ if(fixed)return fixed.value;
+ return null
+}
 
 async function scanLoop(){
  if(!scanning||busy)return;if(video.readyState<2){scanTimer=setTimeout(scanLoop,80);return}busy=true;
@@ -171,22 +205,23 @@ async function ocrModelZone(x,y,cw,ch){
 }
 async function readModelOCR(){
  const w=video.videoWidth,h=video.videoHeight;if(!w||!h)return;
- /* File No.13: 大きな機種文字があるラベル下部を最優先。全体OCRの誤読を抑える */
+ /* File No.14: 大きな機種文字があるラベル下部を最優先。全体OCRの誤読を抑える */
  let m=await ocrModelZone(w*.06,h*.53,w*.88,h*.34);
  if(!m&&scanning)m=await ocrModelZone(w*.03,h*.42,w*.94,h*.46);
  if(m){candidate.textContent=m;detectFast(m,"文字OCR")}
 }
-/* File No.13: 誤確定防止。機種は短時間に同じ値を2回検出した時だけ確定。
+/* File No.14: 誤確定防止。機種は短時間に同じ値を2回検出した時だけ確定。
    1回目→約90ms後に再走査するので、従来より待ち時間を最小化。 */
 function detectFast(value,method){
- if(!value)return;const now=Date.now();candidate.textContent=value;
+ if(!value)return;const now=Date.now();
  if(currentMode==="model"){
-  const exact=extractModel(value);if(!exact){lastCandidate="";lastCandidateAt=0;return}
+  const exact=extractModel(value);
+  if(!exact){candidate.textContent="候補なし";lastCandidate="";lastCandidateAt=0;cameraStatus.textContent="🔍 T629Cを確認中…";return}
   value=exact;candidate.textContent=value;
-  if(value===lastCandidate && now-lastCandidateAt<=1800){confirmRead(value,method);return}
-  lastCandidate=value;lastCandidateAt=now;cameraStatus.textContent="✓ もう一度確認中…";return
+  if(value===lastCandidate && now-lastCandidateAt<=1800){confirmRead(value,method+"＋機種リスト補正");return}
+  lastCandidate=value;lastCandidateAt=now;cameraStatus.textContent="✓ "+value+" を再確認中…";return
  }
- confirmRead(value,method)
+ candidate.textContent=value;confirmRead(value,method)
 }
 function confirmRead(value,method){
  if(!scanning)return;scanning=false;if(scanTimer){clearTimeout(scanTimer);scanTimer=null}
