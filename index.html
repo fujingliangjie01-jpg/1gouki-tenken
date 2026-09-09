@@ -35,7 +35,7 @@ h1{text-align:center;margin:8px 0 20px;font-size:30px}
 .camera-title{text-align:center;font-size:24px;font-weight:900;padding:8px 0 14px}
 .camera-box{position:relative;overflow:hidden;border-radius:16px;background:#111}
 video{display:block;width:100%;min-height:300px;background:#000}
-.scan-frame{position:absolute;left:10%;right:10%;top:56%;height:19%;border:3px solid #0a84ff;border-radius:14px;pointer-events:none}
+.scan-frame{position:absolute;left:4%;right:4%;top:12%;height:76%;border:3px solid #0a84ff;border-radius:14px;pointer-events:none}
 .scan-frame.code{top:25%;height:50%}
 .guide{position:absolute;top:15px;left:10px;right:10px;text-align:center;font-weight:900;text-shadow:0 1px 5px #000}
 .complete{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;text-align:center;background:rgba(0,0,0,.70);padding:24px}
@@ -68,7 +68,7 @@ canvas{display:none}
     <div class="camera-box">
       <video id="video" autoplay playsinline muted></video>
       <div id="scanFrame" class="scan-frame"></div>
-      <div id="guide" class="guide">青枠に機種名を入れてください</div>
+      <div id="guide" class="guide">ラベル全体を青枠に入れてください（文字・バーコード対応）</div>
 
       <div id="completeOverlay" class="complete">
         <div class="complete-mark">✅</div>
@@ -121,8 +121,8 @@ canvas{display:none}
 <canvas id="canvas"></canvas>
 
 <script>
-const MODEL_KEY="kirikae_model_confirmed_v8";
-const CODE_KEY="kirikae_code_confirmed_v8";
+const MODEL_KEY="kirikae_model_confirmed_v11";
+const CODE_KEY="kirikae_code_confirmed_v11";
 const MODEL_PATTERN=/[A-Z][0-9]{3}[A-Z]{1,3}/g;
 
 const startScreen=document.getElementById("startScreen");
@@ -159,6 +159,8 @@ let zxingReader=null;
 let ocrWorker=null;
 let ocrReadyPromise=null;
 let scanTimer=null;
+let modelScanCount=0;
+let lastOcrAt=0;
 
 function readJSON(key){
   try{
@@ -220,6 +222,8 @@ async function openCamera(mode){
   currentMode=mode;
   previousValue="";
   sameCount=0;
+  modelScanCount=0;
+  lastOcrAt=0;
   candidate.textContent="-";
   helpText.textContent="";
   retryCamera.classList.add("hidden");
@@ -231,7 +235,7 @@ async function openCamera(mode){
     scanFrame.classList.add("code");
   }else{
     cameraTitle.textContent="機種読み込み";
-    guide.textContent="青枠に機種名を入れてください";
+    guide.textContent="ラベル全体を青枠に入れてください（文字・バーコード対応）";
     scanFrame.classList.remove("code");
   }
 
@@ -250,7 +254,7 @@ async function openCamera(mode){
 
     /* まず最も互換性の高い設定で1回だけ起動 */
     stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:"environment"},
+      video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},
       audio:false
     });
 
@@ -363,8 +367,14 @@ async function scanLoop(){
     if(currentMode==="code"){
       await readCode();
     }else{
+      modelScanCount++;
       const hit=await readModelBarcode();
-      if(!hit&&scanning)await readModelOCR();
+      /* OCRは重いので約1.6秒おき。バーコードが読めない場合でも文字で最終確定できる */
+      const now=Date.now();
+      if(!hit&&scanning&&(now-lastOcrAt>1600)){
+        lastOcrAt=now;
+        await readModelOCR();
+      }
     }
   }catch(e){
     console.error(e);
@@ -451,48 +461,77 @@ function prepareZXing(){
   return zxingReader;
 }
 
-function drawModelCrop(targetCanvas, yRatio=0, hRatio=1, filter="none"){
+function drawModelZone(targetCanvas, zone, filter="none", rotation=0){
   const w=video.videoWidth,h=video.videoHeight;
   if(!w||!h)return false;
 
-  const baseX=w*.06,baseY=h*.48,baseW=w*.88,baseH=h*.34;
-  const sy=baseY+(baseH*yRatio);
-  const sh=baseH*hRatio;
-  const maxW=1500;
-  const scale=Math.min(1.8,maxW/baseW);
+  /* ラベル全体を広く見る。離して構えても拾えるように中央94%×82%を基本範囲にする */
+  const baseX=w*.03,baseY=h*.09,baseW=w*.94,baseH=h*.82;
+  const sx=baseX+baseW*zone.x;
+  const sy=baseY+baseH*zone.y;
+  const sw=baseW*zone.w;
+  const sh=baseH*zone.h;
+  const maxSide=1550;
+  const scale=Math.min(2.0,maxSide/Math.max(sw,sh));
+  const srcW=Math.max(1,Math.round(sw*scale));
+  const srcH=Math.max(1,Math.round(sh*scale));
 
-  targetCanvas.width=Math.max(1,Math.round(baseW*scale));
-  targetCanvas.height=Math.max(1,Math.round(sh*scale));
+  const work=document.createElement("canvas");
+  work.width=srcW;
+  work.height=srcH;
+  const wctx=work.getContext("2d",{willReadFrequently:true});
+  wctx.filter=filter;
+  wctx.drawImage(video,sx,sy,sw,sh,0,0,srcW,srcH);
+  wctx.filter="none";
 
-  const ctx=targetCanvas.getContext("2d",{willReadFrequently:true});
-  ctx.filter=filter;
-  ctx.drawImage(video,baseX,sy,baseW,sh,0,0,targetCanvas.width,targetCanvas.height);
-  ctx.filter="none";
+  if(rotation===90||rotation===-90){
+    targetCanvas.width=srcH;
+    targetCanvas.height=srcW;
+    const ctx=targetCanvas.getContext("2d",{willReadFrequently:true});
+    ctx.save();
+    if(rotation===90){
+      ctx.translate(srcH,0);ctx.rotate(Math.PI/2);
+    }else{
+      ctx.translate(0,srcW);ctx.rotate(-Math.PI/2);
+    }
+    ctx.drawImage(work,0,0);
+    ctx.restore();
+  }else{
+    targetCanvas.width=srcW;
+    targetCanvas.height=srcH;
+    targetCanvas.getContext("2d",{willReadFrequently:true}).drawImage(work,0,0);
+  }
   return true;
 }
 
-function applyBarcodeThreshold(targetCanvas, mode="normal"){
+function applyBarcodeThreshold(targetCanvas, level=.52){
   const ctx=targetCanvas.getContext("2d",{willReadFrequently:true});
   const img=ctx.getImageData(0,0,targetCanvas.width,targetCanvas.height);
   const d=img.data;
   let min=255,max=0;
-
   for(let i=0;i<d.length;i+=4){
     const g=(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)|0;
-    if(g<min)min=g;
-    if(g>max)max=g;
+    if(g<min)min=g;if(g>max)max=g;
     d[i]=d[i+1]=d[i+2]=g;
   }
-
-  const span=Math.max(24,max-min);
-  const threshold=min+span*(mode==="light"?.62:mode==="dark"?.42:.52);
-
+  const span=Math.max(20,max-min);
+  const t=min+span*level;
   for(let i=0;i<d.length;i+=4){
-    let v=d[i]>=threshold?255:0;
-    if(mode==="invert")v=255-v;
+    const v=d[i]>=t?255:0;
     d[i]=d[i+1]=d[i+2]=v;
   }
   ctx.putImageData(img,0,0);
+}
+
+async function tryZXingCanvas(reader){
+  try{
+    const result=await reader.decodeFromCanvas(canvas);
+    const raw=result&&(result.getText?result.getText():result.text);
+    const model=extractModel(raw||"");
+    if(model)return model;
+  }catch(e){}
+  try{if(reader.reset)reader.reset();}catch(e){}
+  return null;
 }
 
 async function decodeModelWithZXing(){
@@ -500,39 +539,43 @@ async function decodeModelWithZXing(){
   if(!reader)return null;
 
   /*
-    薄い印字・白線対策：
-    1) 生画像
-    2) 強コントラスト
-    3) 二値化を濃淡2段階
-    4) 上側/下側だけを切り出し（横白線を避ける）
-    を順番に試す。
+    写真のような「横向き1Dバーコード」「2列印字」「薄い印字」「途中の白線」を想定。
+    - ラベル全体 / 左列 / 右列 / 上部を別々に解析
+    - 0度 / 90度 / -90度を試す
+    - 生画像 / 強コントラスト / 二値化を試す
+    白線が入っていても、別の帯・列・回転方向から復号できる可能性を上げる。
   */
+  const zones={
+    full:{x:0,y:0,w:1,h:1},
+    upper:{x:.05,y:.03,w:.90,h:.72},
+    left:{x:.03,y:.03,w:.47,h:.72},
+    right:{x:.50,y:.03,w:.47,h:.72}
+  };
   const passes=[
-    {y:0,h:1,filter:"none",threshold:null},
-    {y:0,h:1,filter:"grayscale(1) contrast(2.2)",threshold:null},
-    {y:0,h:1,filter:"grayscale(1) contrast(1.8)",threshold:"light"},
-    {y:0,h:1,filter:"grayscale(1) contrast(1.8)",threshold:"dark"},
-    {y:0.00,h:.46,filter:"grayscale(1) contrast(2.3)",threshold:null},
-    {y:.54,h:.46,filter:"grayscale(1) contrast(2.3)",threshold:null}
+    [zones.full,"grayscale(1) contrast(1.8)",90,null],
+    [zones.full,"grayscale(1) contrast(1.8)",-90,null],
+    [zones.left,"grayscale(1) contrast(2.3)",90,null],
+    [zones.right,"grayscale(1) contrast(2.3)",90,null],
+    [zones.left,"grayscale(1) contrast(2.3)",-90,null],
+    [zones.right,"grayscale(1) contrast(2.3)",-90,null],
+    [zones.upper,"grayscale(1) contrast(2.1)",90,.48],
+    [zones.upper,"grayscale(1) contrast(2.1)",90,.58],
+    [zones.full,"none",0,null],
+    [zones.full,"grayscale(1) contrast(2.0)",0,.52]
   ];
 
-  for(const p of passes){
+  for(const [zone,filter,rot,thr] of passes){
     if(!scanning)return null;
-    if(!drawModelCrop(canvas,p.y,p.h,p.filter))continue;
-    if(p.threshold)applyBarcodeThreshold(canvas,p.threshold);
-    try{
-      const result=await reader.decodeFromCanvas(canvas);
-      const raw=result && (result.getText?result.getText():result.text);
-      const model=extractModel(raw||"");
-      if(model)return model;
-    }catch(e){}
-    try{ if(reader.reset)reader.reset(); }catch(e){}
+    if(!drawModelZone(canvas,zone,filter,rot))continue;
+    if(thr!==null)applyBarcodeThreshold(canvas,thr);
+    const model=await tryZXingCanvas(reader);
+    if(model)return model;
   }
   return null;
 }
 
 async function readModelBarcode(){
-  /* 端末標準のBarcodeDetectorが使える場合は最初に高速判定 */
+  /* 端末標準APIはまず高速判定。向きが合えば即座に拾う */
   if(barcodeDetector){
     try{
       const results=await barcodeDetector.detect(video);
@@ -547,39 +590,52 @@ async function readModelBarcode(){
     }catch(e){}
   }
 
-  /* iPhone等ではZXingで1Dバーコードを補完 */
   const zxingModel=await decodeModelWithZXing();
   if(zxingModel){
     candidate.textContent=zxingModel;
-    handleDetected(zxingModel,"バーコード強化");
+    handleDetected(zxingModel,"横向き/薄バーコード強化");
     return true;
   }
-
   return false;
 }
 
-async function readModelOCR(){
+function drawOCRZone(zone, filter="grayscale(1) contrast(1.7)"){
   const w=video.videoWidth,h=video.videoHeight;
-  if(!w||!h)return;
-
-  const x=w*.10,y=h*.56,cw=w*.80,ch=h*.19;
-  const scale=Math.min(1,1200/cw);
-
-  canvas.width=Math.max(1,Math.round(cw*scale));
-  canvas.height=Math.max(1,Math.round(ch*scale));
-
+  if(!w||!h)return false;
+  const baseX=w*.03,baseY=h*.09,baseW=w*.94,baseH=h*.82;
+  const sx=baseX+baseW*zone.x, sy=baseY+baseH*zone.y;
+  const sw=baseW*zone.w, sh=baseH*zone.h;
+  const scale=Math.min(2.2,1500/Math.max(sw,1));
+  canvas.width=Math.max(1,Math.round(sw*scale));
+  canvas.height=Math.max(1,Math.round(sh*scale));
   const ctx=canvas.getContext("2d",{willReadFrequently:true});
-  ctx.drawImage(video,x,y,cw,ch,0,0,canvas.width,canvas.height);
+  ctx.filter=filter;
+  ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
+  ctx.filter="none";
+  return true;
+}
 
+async function readModelOCR(){
+  /* 最終値は機種文字で確定。写真のT629Cのようにラベル下部にある文字を優先し、全体も保険で見る */
+  const zones=[
+    {x:.03,y:.62,w:.94,h:.35},
+    {x:.02,y:.48,w:.96,h:.50},
+    {x:0,y:0,w:1,h:1}
+  ];
   try{
     const worker=await prepareOCR();
-    const result=await worker.recognize(canvas);
-    const model=extractModel(result.data.text||"");
-
-    if(model){
-      candidate.textContent=model;
-      handleDetected(model,"文字OCR");
+    for(const z of zones){
+      if(!scanning)return;
+      if(!drawOCRZone(z))continue;
+      const result=await worker.recognize(canvas);
+      const model=extractModel(result.data.text||"");
+      if(model){
+        candidate.textContent=model;
+        handleDetected(model,"文字OCR最終確認");
+        return;
+      }
     }
+    cameraStatus.textContent="🔍 文字・バーコードを広範囲で読み取り中…";
   }catch(e){}
 }
 
