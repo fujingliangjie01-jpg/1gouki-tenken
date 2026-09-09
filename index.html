@@ -6,6 +6,7 @@
 <title>切替確認</title>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#0b0b0c;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -154,6 +155,7 @@ let cameraStarting=false;
 let previousValue="";
 let sameCount=0;
 let barcodeDetector=null;
+let zxingReader=null;
 let ocrWorker=null;
 let ocrReadyPromise=null;
 let scanTimer=null;
@@ -262,7 +264,7 @@ async function openCamera(mode){
     }
 
     scanning=true;
-    cameraStatus.textContent="🔍 読み取り中…";
+    cameraStatus.textContent=mode==="model"?"🔍 文字・バーコードを読み取り中…":"🔍 QRコードを読み取り中…";
     scanTimer=setTimeout(scanLoop,300);
 
   }catch(e){
@@ -437,19 +439,122 @@ async function readCode(){
 
   cameraStatus.textContent="🔍 QRコードを読み取り中…";
 }
-async function readModelBarcode(){
-  if(!barcodeDetector)return false;
+function prepareZXing(){
+  if(zxingReader)return zxingReader;
   try{
-    const results=await barcodeDetector.detect(video);
-    for(const r of results){
-      const model=extractModel(r.rawValue||"");
-      if(model){
-        candidate.textContent=model;
-        handleDetected(model,"バーコード");
-        return true;
-      }
+    if(window.ZXing && ZXing.BrowserMultiFormatReader){
+      zxingReader=new ZXing.BrowserMultiFormatReader();
     }
-  }catch(e){}
+  }catch(e){
+    zxingReader=null;
+  }
+  return zxingReader;
+}
+
+function drawModelCrop(targetCanvas, yRatio=0, hRatio=1, filter="none"){
+  const w=video.videoWidth,h=video.videoHeight;
+  if(!w||!h)return false;
+
+  const baseX=w*.06,baseY=h*.48,baseW=w*.88,baseH=h*.34;
+  const sy=baseY+(baseH*yRatio);
+  const sh=baseH*hRatio;
+  const maxW=1500;
+  const scale=Math.min(1.8,maxW/baseW);
+
+  targetCanvas.width=Math.max(1,Math.round(baseW*scale));
+  targetCanvas.height=Math.max(1,Math.round(sh*scale));
+
+  const ctx=targetCanvas.getContext("2d",{willReadFrequently:true});
+  ctx.filter=filter;
+  ctx.drawImage(video,baseX,sy,baseW,sh,0,0,targetCanvas.width,targetCanvas.height);
+  ctx.filter="none";
+  return true;
+}
+
+function applyBarcodeThreshold(targetCanvas, mode="normal"){
+  const ctx=targetCanvas.getContext("2d",{willReadFrequently:true});
+  const img=ctx.getImageData(0,0,targetCanvas.width,targetCanvas.height);
+  const d=img.data;
+  let min=255,max=0;
+
+  for(let i=0;i<d.length;i+=4){
+    const g=(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)|0;
+    if(g<min)min=g;
+    if(g>max)max=g;
+    d[i]=d[i+1]=d[i+2]=g;
+  }
+
+  const span=Math.max(24,max-min);
+  const threshold=min+span*(mode==="light"?.62:mode==="dark"?.42:.52);
+
+  for(let i=0;i<d.length;i+=4){
+    let v=d[i]>=threshold?255:0;
+    if(mode==="invert")v=255-v;
+    d[i]=d[i+1]=d[i+2]=v;
+  }
+  ctx.putImageData(img,0,0);
+}
+
+async function decodeModelWithZXing(){
+  const reader=prepareZXing();
+  if(!reader)return null;
+
+  /*
+    薄い印字・白線対策：
+    1) 生画像
+    2) 強コントラスト
+    3) 二値化を濃淡2段階
+    4) 上側/下側だけを切り出し（横白線を避ける）
+    を順番に試す。
+  */
+  const passes=[
+    {y:0,h:1,filter:"none",threshold:null},
+    {y:0,h:1,filter:"grayscale(1) contrast(2.2)",threshold:null},
+    {y:0,h:1,filter:"grayscale(1) contrast(1.8)",threshold:"light"},
+    {y:0,h:1,filter:"grayscale(1) contrast(1.8)",threshold:"dark"},
+    {y:0.00,h:.46,filter:"grayscale(1) contrast(2.3)",threshold:null},
+    {y:.54,h:.46,filter:"grayscale(1) contrast(2.3)",threshold:null}
+  ];
+
+  for(const p of passes){
+    if(!scanning)return null;
+    if(!drawModelCrop(canvas,p.y,p.h,p.filter))continue;
+    if(p.threshold)applyBarcodeThreshold(canvas,p.threshold);
+    try{
+      const result=await reader.decodeFromCanvas(canvas);
+      const raw=result && (result.getText?result.getText():result.text);
+      const model=extractModel(raw||"");
+      if(model)return model;
+    }catch(e){}
+    try{ if(reader.reset)reader.reset(); }catch(e){}
+  }
+  return null;
+}
+
+async function readModelBarcode(){
+  /* 端末標準のBarcodeDetectorが使える場合は最初に高速判定 */
+  if(barcodeDetector){
+    try{
+      const results=await barcodeDetector.detect(video);
+      for(const r of results){
+        const model=extractModel(r.rawValue||"");
+        if(model){
+          candidate.textContent=model;
+          handleDetected(model,"バーコード");
+          return true;
+        }
+      }
+    }catch(e){}
+  }
+
+  /* iPhone等ではZXingで1Dバーコードを補完 */
+  const zxingModel=await decodeModelWithZXing();
+  if(zxingModel){
+    candidate.textContent=zxingModel;
+    handleDetected(zxingModel,"バーコード強化");
+    return true;
+  }
+
   return false;
 }
 
