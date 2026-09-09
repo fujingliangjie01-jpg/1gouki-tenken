@@ -27,7 +27,7 @@ h1{text-align:center;margin:8px 0 20px;font-size:30px}.card{background:#18181b;b
 .camera-title{text-align:center;font-size:24px;font-weight:900;padding:8px 0 10px}
 .camera-box{position:relative;overflow:hidden;border-radius:16px;background:#111}
 video{display:block;width:100%;height:min(68vh,650px);min-height:420px;object-fit:cover;background:#000}
-/* File No.12: 機種読み取り枠を大幅拡大 */
+/* File No.13: 機種読み取り枠を大幅拡大 */
 .scan-frame{position:absolute;left:2%;right:2%;top:12%;height:76%;border:4px solid #0a84ff;border-radius:16px;pointer-events:none;box-shadow:0 0 0 1px rgba(255,255,255,.18) inset}
 .scan-frame.code{left:4%;right:4%;top:10%;height:80%}
 .guide{position:absolute;top:18px;left:12px;right:12px;text-align:center;font-weight:900;text-shadow:0 1px 5px #000}
@@ -40,7 +40,7 @@ video{display:block;width:100%;height:min(68vh,650px);min-height:420px;object-fi
 </style>
 </head>
 <body>
-<div class="file-no">File No.12</div>
+<div class="file-no">File No.13</div>
 
 <section id="startScreen" class="screen">
 <div class="start-box">
@@ -91,8 +91,8 @@ video{display:block;width:100%;height:min(68vh,650px);min-height:420px;object-fi
 <canvas id="canvas"></canvas>
 
 <script>
-const MODEL_KEY="kirikae_model_confirmed_v12";
-const CODE_KEY="kirikae_code_confirmed_v12";
+const MODEL_KEY="kirikae_model_confirmed_v13";
+const CODE_KEY="kirikae_code_confirmed_v13";
 const MODEL_PATTERN=/[A-Z][0-9]{3}[A-Z]{1,3}/g;
 const $=id=>document.getElementById(id);
 const startScreen=$("startScreen"),cameraScreen=$("cameraScreen"),inspectionScreen=$("inspectionScreen");
@@ -163,24 +163,29 @@ async function readModelBarcode(){
  try{const rs=await barcodeDetector.detect(video);for(const r of rs){const m=extractModel(r.rawValue||"");if(m){candidate.textContent=m;detectFast(m,"バーコード");return true}}}catch(e){}
  return false
 }
+async function ocrModelZone(x,y,cw,ch){
+ const w=video.videoWidth,h=video.videoHeight;if(!w||!h)return null;
+ const scale=Math.min(1,1400/cw);canvas.width=Math.round(cw*scale);canvas.height=Math.round(ch*scale);
+ const ctx=canvas.getContext("2d",{willReadFrequently:true});ctx.drawImage(video,x,y,cw,ch,0,0,canvas.width,canvas.height);
+ try{const worker=await prepareOCR();const result=await worker.recognize(canvas);return extractModel(result.data.text||"")}catch(e){return null}
+}
 async function readModelOCR(){
  const w=video.videoWidth,h=video.videoHeight;if(!w||!h)return;
- /* 広い青枠と同等の領域をOCR。ラベル下部の文字も拾う */
- const x=w*.02,y=h*.12,cw=w*.96,ch=h*.76,scale=Math.min(1,1400/cw);
- canvas.width=Math.round(cw*scale);canvas.height=Math.round(ch*scale);
- const ctx=canvas.getContext("2d",{willReadFrequently:true});ctx.drawImage(video,x,y,cw,ch,0,0,canvas.width,canvas.height);
- try{const worker=await prepareOCR();const result=await worker.recognize(canvas);const m=extractModel(result.data.text||"");
- if(m){candidate.textContent=m;detectFast(m,"文字OCR")}}catch(e){}
+ /* File No.13: 大きな機種文字があるラベル下部を最優先。全体OCRの誤読を抑える */
+ let m=await ocrModelZone(w*.06,h*.53,w*.88,h*.34);
+ if(!m&&scanning)m=await ocrModelZone(w*.03,h*.42,w*.94,h*.46);
+ if(m){candidate.textContent=m;detectFast(m,"文字OCR")}
 }
-/* 最速化：有効な機種文字を1回確実に取得した時点で確定。
-   直前候補が短時間に再検出された場合も即確定。 */
+/* File No.13: 誤確定防止。機種は短時間に同じ値を2回検出した時だけ確定。
+   1回目→約90ms後に再走査するので、従来より待ち時間を最小化。 */
 function detectFast(value,method){
  if(!value)return;const now=Date.now();candidate.textContent=value;
- if(currentMode==="model" && !MODEL_PATTERN.test(value)){MODEL_PATTERN.lastIndex=0;return}
- MODEL_PATTERN.lastIndex=0;
- if(value===lastCandidate && now-lastCandidateAt<1200){confirmRead(value,method);return}
- lastCandidate=value;lastCandidateAt=now;cameraStatus.textContent="✓ 読み取り確認";
- /* 正規表現に合う文字/有効コードなら待たず確定 */
+ if(currentMode==="model"){
+  const exact=extractModel(value);if(!exact){lastCandidate="";lastCandidateAt=0;return}
+  value=exact;candidate.textContent=value;
+  if(value===lastCandidate && now-lastCandidateAt<=1800){confirmRead(value,method);return}
+  lastCandidate=value;lastCandidateAt=now;cameraStatus.textContent="✓ もう一度確認中…";return
+ }
  confirmRead(value,method)
 }
 function confirmRead(value,method){
