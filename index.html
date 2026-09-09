@@ -6,679 +6,188 @@
 <title>切替確認</title>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#0b0b0c;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-.hidden{display:none!important}
-.screen{min-height:100vh}
-.wrap{max-width:720px;margin:auto;padding:18px}
-h1{text-align:center;margin:8px 0 20px;font-size:30px}
-.card{background:#18181b;border-radius:16px;padding:16px;margin-bottom:14px}
-.label{color:#aaa;font-size:14px;margin-bottom:7px}
-.model{font-size:32px;font-weight:900;letter-spacing:2px}
+.hidden{display:none!important}.screen{min-height:100vh}.wrap{max-width:720px;margin:auto;padding:18px}
+.file-no{position:fixed;top:max(8px,env(safe-area-inset-top));right:10px;z-index:9999;font-size:10px;font-weight:700;color:rgba(255,255,255,.28);letter-spacing:.5px;pointer-events:none}
+h1{text-align:center;margin:8px 0 20px;font-size:30px}.card{background:#18181b;border-radius:16px;padding:16px;margin-bottom:14px}
+.label{color:#aaa;font-size:14px;margin-bottom:7px}.model{font-size:32px;font-weight:900;letter-spacing:2px}
 .main-btn,.retry-btn,.cancel-btn{width:100%;min-height:58px;border:0;border-radius:14px;color:#fff;font-size:18px;font-weight:900}
-.main-btn,.retry-btn{background:#0a84ff}
-.cancel-btn{background:#2c2c2e;margin-top:10px}
+.main-btn,.retry-btn{background:#0a84ff}.cancel-btn{background:#2c2c2e;margin-top:10px}
 .start-box{min-height:100vh;display:flex;flex-direction:column;justify-content:center;max-width:620px;margin:auto;padding:22px}
-.start-title{text-align:center;font-size:36px;font-weight:900;margin-bottom:12px}
-.start-sub{text-align:center;color:#aaa;margin-bottom:28px}
+.start-title{text-align:center;font-size:36px;font-weight:900;margin-bottom:12px}.start-sub{text-align:center;color:#aaa;margin-bottom:28px}
 .inspect-title{margin:24px 0 10px;font-size:22px;font-weight:900}
 .item{display:flex;align-items:center;gap:12px;min-height:62px;padding:12px 14px;margin-bottom:10px;background:#18181b;border:1px solid #303034;border-radius:14px}
 .num{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#2c2c2e;font-weight:900;flex:none}
-.name{flex:1;min-width:0;font-size:18px;font-weight:800}
-.status{color:#aaa;font-size:14px;font-weight:800;white-space:nowrap}
+.name{flex:1;min-width:0;font-size:18px;font-weight:800}.status{color:#aaa;font-size:14px;font-weight:800;white-space:nowrap}
 .small-btn{border:0;border-radius:11px;background:#0a84ff;color:#fff;min-height:44px;padding:0 12px;font-size:15px;font-weight:850}
 .done{border-color:#30d158}.done .status{color:#30d158}
-#cameraScreen{background:#000}
-.camera-wrap{max-width:760px;margin:auto;padding:14px}
-.camera-title{text-align:center;font-size:24px;font-weight:900;padding:8px 0 14px}
+#cameraScreen{background:#000}.camera-wrap{max-width:760px;margin:auto;padding:8px}
+.camera-title{text-align:center;font-size:24px;font-weight:900;padding:8px 0 10px}
 .camera-box{position:relative;overflow:hidden;border-radius:16px;background:#111}
-video{display:block;width:100%;min-height:300px;background:#000}
-.scan-frame{position:absolute;left:4%;right:4%;top:12%;height:76%;border:3px solid #0a84ff;border-radius:14px;pointer-events:none}
-.scan-frame.code{top:25%;height:50%}
-.guide{position:absolute;top:15px;left:10px;right:10px;text-align:center;font-weight:900;text-shadow:0 1px 5px #000}
+video{display:block;width:100%;height:min(68vh,650px);min-height:420px;object-fit:cover;background:#000}
+/* File No.12: 機種読み取り枠を大幅拡大 */
+.scan-frame{position:absolute;left:2%;right:2%;top:12%;height:76%;border:4px solid #0a84ff;border-radius:16px;pointer-events:none;box-shadow:0 0 0 1px rgba(255,255,255,.18) inset}
+.scan-frame.code{left:4%;right:4%;top:10%;height:80%}
+.guide{position:absolute;top:18px;left:12px;right:12px;text-align:center;font-weight:900;text-shadow:0 1px 5px #000}
 .complete{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;text-align:center;background:rgba(0,0,0,.70);padding:24px}
-.complete.show{display:flex}
-.complete-mark{font-size:64px}
-.complete-title{font-size:40px;font-weight:900}
+.complete.show{display:flex}.complete-mark{font-size:64px}.complete-title{font-size:40px;font-weight:900}
 .complete-value{margin-top:10px;font-size:44px;font-weight:900;color:#30d158;letter-spacing:2px;word-break:break-all}
-.camera-status{margin-top:14px;padding:14px;border-radius:13px;background:#18181b}
-#cameraStatus{font-size:20px;font-weight:850}
-#candidate{margin-top:8px;font-size:23px;font-weight:900;word-break:break-all}
-.error{color:#ff453a}
-.help{margin-top:8px;color:#aaa;font-size:13px;line-height:1.5}
-canvas{display:none}
+.camera-status{margin-top:10px;padding:10px 14px;border-radius:13px;background:#18181b}
+#cameraStatus{font-size:18px;font-weight:850}#candidate{margin-top:5px;font-size:22px;font-weight:900;word-break:break-all}
+.error{color:#ff453a}.help{margin-top:6px;color:#aaa;font-size:13px;line-height:1.4}canvas{display:none}
 </style>
 </head>
 <body>
+<div class="file-no">File No.12</div>
 
 <section id="startScreen" class="screen">
-  <div class="start-box">
-    <div class="start-title">切替確認</div>
-    <div class="start-sub">機種情報はまだ読み込まれていません</div>
-    <button id="startModelCamera" class="main-btn">📷 機種確認カメラ</button>
-  </div>
+<div class="start-box">
+<div class="start-title">切替確認</div>
+<div class="start-sub">文字またはバーコードから機種を確認します</div>
+<button id="startModelCamera" class="main-btn">📷 機種確認カメラ</button>
+</div>
 </section>
 
 <section id="cameraScreen" class="screen hidden">
-  <div class="camera-wrap">
-    <div id="cameraTitle" class="camera-title">機種読み込み</div>
-
-    <div class="camera-box">
-      <video id="video" autoplay playsinline muted></video>
-      <div id="scanFrame" class="scan-frame"></div>
-      <div id="guide" class="guide">ラベル全体を青枠に入れてください（文字・バーコード対応）</div>
-
-      <div id="completeOverlay" class="complete">
-        <div class="complete-mark">✅</div>
-        <div class="complete-title">読み込みOK</div>
-        <div id="completeValue" class="complete-value"></div>
-      </div>
-    </div>
-
-    <div class="camera-status">
-      <div id="cameraStatus">待機中</div>
-      <div id="candidate">-</div>
-      <div id="helpText" class="help"></div>
-    </div>
-
-    <button id="retryCamera" class="retry-btn hidden">カメラを再起動</button>
-    <button id="cancelCamera" class="cancel-btn">戻る</button>
-  </div>
+<div class="camera-wrap">
+<div id="cameraTitle" class="camera-title">機種読み込み</div>
+<div class="camera-box">
+<video id="video" autoplay playsinline muted></video>
+<div id="scanFrame" class="scan-frame"></div>
+<div id="guide" class="guide">青枠にラベル全体（バーコード＋機種文字）を入れてください</div>
+<div id="completeOverlay" class="complete">
+<div class="complete-mark">✅</div><div class="complete-title">読み込みOK</div>
+<div id="completeValue" class="complete-value"></div>
+</div>
+</div>
+<div class="camera-status">
+<div id="cameraStatus">待機中</div><div id="candidate">-</div><div id="helpText" class="help"></div>
+</div>
+<button id="retryCamera" class="retry-btn hidden">カメラを再起動</button>
+<button id="cancelCamera" class="cancel-btn">戻る</button>
+</div>
 </section>
 
 <section id="inspectionScreen" class="screen hidden">
-  <div class="wrap">
-    <h1>切替確認</h1>
-
-    <div class="card">
-      <div class="label">読み込み機種</div>
-      <div id="modelValue" class="model">---</div>
-    </div>
-
-    <button id="rescanModel" class="main-btn">📷 機種を読み直す</button>
-
-    <div class="inspect-title">点検</div>
-    <div class="item"><div class="num">1</div><div class="name">Fドレン</div><div class="status">未点検</div></div>
-    <div class="item"><div class="num">2</div><div class="name">Rドレン</div><div class="status">未点検</div></div>
-    <div class="item"><div class="num">3</div><div class="name">Sパイプ</div><div class="status">未点検</div></div>
-    <div class="item"><div class="num">4</div><div class="name">HGパイプ（T6/T7）</div><div class="status">未点検</div></div>
-    <div class="item"><div class="num">5</div><div class="name">ガス抜きシート</div><div class="status">未点検</div></div>
-    <div class="item"><div class="num">6</div><div class="name">CPケース</div><div class="status">未点検</div></div>
-    <div class="item"><div class="num">7</div><div class="name">シキリ板確認</div><div class="status">未点検</div></div>
-    <div class="item"><div class="num">8</div><div class="name">シキリマーキング</div><div class="status">未点検</div></div>
-
-    <div id="codeItem" class="item">
-      <div class="num">9</div>
-      <div class="name">コード確認</div>
-      <button id="scanCode" class="small-btn">📷 QR確認</button>
-      <div id="codeStatus" class="status">未確認</div>
-    </div>
-  </div>
+<div class="wrap">
+<h1>切替確認</h1>
+<div class="card"><div class="label">読み込み機種</div><div id="modelValue" class="model">---</div></div>
+<button id="rescanModel" class="main-btn">📷 機種を読み直す</button>
+<div class="inspect-title">点検</div>
+<div class="item"><div class="num">1</div><div class="name">Fドレン</div><div class="status">未点検</div></div>
+<div class="item"><div class="num">2</div><div class="name">Rドレン</div><div class="status">未点検</div></div>
+<div class="item"><div class="num">3</div><div class="name">Sパイプ</div><div class="status">未点検</div></div>
+<div class="item"><div class="num">4</div><div class="name">HGパイプ（T6/T7）</div><div class="status">未点検</div></div>
+<div class="item"><div class="num">5</div><div class="name">ガス抜きシート</div><div class="status">未点検</div></div>
+<div class="item"><div class="num">6</div><div class="name">CPケース</div><div class="status">未点検</div></div>
+<div class="item"><div class="num">7</div><div class="name">シキリ板確認</div><div class="status">未点検</div></div>
+<div class="item"><div class="num">8</div><div class="name">シキリマーキング</div><div class="status">未点検</div></div>
+<div id="codeItem" class="item"><div class="num">9</div><div class="name">コード確認</div>
+<button id="scanCode" class="small-btn">📷 QR確認</button><div id="codeStatus" class="status">未確認</div></div>
+</div>
 </section>
-
 <canvas id="canvas"></canvas>
 
 <script>
-const MODEL_KEY="kirikae_model_confirmed_v11";
-const CODE_KEY="kirikae_code_confirmed_v11";
+const MODEL_KEY="kirikae_model_confirmed_v12";
+const CODE_KEY="kirikae_code_confirmed_v12";
 const MODEL_PATTERN=/[A-Z][0-9]{3}[A-Z]{1,3}/g;
+const $=id=>document.getElementById(id);
+const startScreen=$("startScreen"),cameraScreen=$("cameraScreen"),inspectionScreen=$("inspectionScreen");
+const video=$("video"),canvas=$("canvas"),scanFrame=$("scanFrame"),guide=$("guide"),cameraTitle=$("cameraTitle");
+const cameraStatus=$("cameraStatus"),candidate=$("candidate"),helpText=$("helpText"),completeOverlay=$("completeOverlay"),completeValue=$("completeValue");
+const retryCamera=$("retryCamera"),modelValue=$("modelValue"),codeItem=$("codeItem"),codeStatus=$("codeStatus");
+let currentMode="model",stream=null,scanning=false,busy=false,cameraStarting=false,barcodeDetector=null,ocrWorker=null,ocrReadyPromise=null,scanTimer=null;
+let lastCandidate="",lastCandidateAt=0;
 
-const startScreen=document.getElementById("startScreen");
-const cameraScreen=document.getElementById("cameraScreen");
-const inspectionScreen=document.getElementById("inspectionScreen");
-const startModelCamera=document.getElementById("startModelCamera");
-const rescanModel=document.getElementById("rescanModel");
-const scanCode=document.getElementById("scanCode");
-const cancelCamera=document.getElementById("cancelCamera");
-const retryCamera=document.getElementById("retryCamera");
-const modelValue=document.getElementById("modelValue");
-const codeItem=document.getElementById("codeItem");
-const codeStatus=document.getElementById("codeStatus");
-const video=document.getElementById("video");
-const canvas=document.getElementById("canvas");
-const cameraTitle=document.getElementById("cameraTitle");
-const scanFrame=document.getElementById("scanFrame");
-const guide=document.getElementById("guide");
-const completeOverlay=document.getElementById("completeOverlay");
-const completeValue=document.getElementById("completeValue");
-const cameraStatus=document.getElementById("cameraStatus");
-const candidate=document.getElementById("candidate");
-const helpText=document.getElementById("helpText");
-
-let currentMode="model";
-let stream=null;
-let scanning=false;
-let busy=false;
-let cameraStarting=false;
-let previousValue="";
-let sameCount=0;
-let barcodeDetector=null;
-let zxingReader=null;
-let ocrWorker=null;
-let ocrReadyPromise=null;
-let scanTimer=null;
-let modelScanCount=0;
-let lastOcrAt=0;
-
-function readJSON(key){
-  try{
-    const raw=localStorage.getItem(key);
-    return raw?JSON.parse(raw):null;
-  }catch(e){return null}
-}
-
-function showOnly(screen){
-  startScreen.classList.add("hidden");
-  cameraScreen.classList.add("hidden");
-  inspectionScreen.classList.add("hidden");
-  screen.classList.remove("hidden");
-}
-
+function readJSON(key){try{const r=localStorage.getItem(key);return r?JSON.parse(r):null}catch(e){return null}}
+function showOnly(s){[startScreen,cameraScreen,inspectionScreen].forEach(x=>x.classList.add("hidden"));s.classList.remove("hidden")}
 function showInspection(){
-  stopCamera();
-  const model=readJSON(MODEL_KEY);
-  if(!model||!model.value){
-    showOnly(startScreen);
-    return;
-  }
-  modelValue.textContent=model.value;
-
-  const code=readJSON(CODE_KEY);
-  if(code&&code.value){
-    codeStatus.textContent="✅ 完了";
-    codeItem.classList.add("done");
-  }else{
-    codeStatus.textContent="未確認";
-    codeItem.classList.remove("done");
-  }
-  showOnly(inspectionScreen);
+ stopCamera();const m=readJSON(MODEL_KEY);if(!m||!m.value){showOnly(startScreen);return}
+ modelValue.textContent=m.value;const c=readJSON(CODE_KEY);
+ if(c&&c.value){codeStatus.textContent="✅ 完了";codeItem.classList.add("done")}else{codeStatus.textContent="未確認";codeItem.classList.remove("done")}
+ showOnly(inspectionScreen)
 }
-
-(function init(){
-  const model=readJSON(MODEL_KEY);
-  if(model&&model.value) showInspection();
-  else showOnly(startScreen);
-})();
-
-startModelCamera.addEventListener("click",()=>openCamera("model"));
-rescanModel.addEventListener("click",()=>openCamera("model"));
-scanCode.addEventListener("click",()=>openCamera("code"));
-retryCamera.addEventListener("click",()=>openCamera(currentMode));
-
-cancelCamera.addEventListener("click",()=>{
-  stopCamera();
-  if(readJSON(MODEL_KEY)) showInspection();
-  else showOnly(startScreen);
-});
+(function(){readJSON(MODEL_KEY)?showInspection():showOnly(startScreen)})();
+$("startModelCamera").onclick=()=>openCamera("model");$("rescanModel").onclick=()=>openCamera("model");$("scanCode").onclick=()=>openCamera("code");
+retryCamera.onclick=()=>openCamera(currentMode);$("cancelCamera").onclick=()=>{stopCamera();readJSON(MODEL_KEY)?showInspection():showOnly(startScreen)};
 
 async function openCamera(mode){
-  /* 二重起動を完全防止 */
-  if(cameraStarting) return;
-  cameraStarting=true;
-
-  stopCamera();
-  currentMode=mode;
-  previousValue="";
-  sameCount=0;
-  modelScanCount=0;
-  lastOcrAt=0;
-  candidate.textContent="-";
-  helpText.textContent="";
-  retryCamera.classList.add("hidden");
-  completeOverlay.classList.remove("show");
-
-  if(mode==="code"){
-    cameraTitle.textContent="コード確認";
-    guide.textContent="QRコード全体を枠内に入れてください";
-    scanFrame.classList.add("code");
-  }else{
-    cameraTitle.textContent="機種読み込み";
-    guide.textContent="ラベル全体を青枠に入れてください（文字・バーコード対応）";
-    scanFrame.classList.remove("code");
-  }
-
-  showOnly(cameraScreen);
-  cameraStatus.classList.remove("error");
-  cameraStatus.textContent="カメラ起動中…";
-
-  try{
-    if(!window.isSecureContext){
-      throw new Error("NOT_SECURE");
-    }
-
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      throw new Error("NO_GETUSERMEDIA");
-    }
-
-    /* まず最も互換性の高い設定で1回だけ起動 */
-    stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},
-      audio:false
-    });
-
-    video.srcObject=stream;
-    await video.play();
-
-    await prepareBarcode();
-
-    if(mode==="model"){
-      prepareOCR().catch(()=>{});
-    }
-
-    scanning=true;
-    cameraStatus.textContent=mode==="model"?"🔍 文字・バーコードを読み取り中…":"🔍 QRコードを読み取り中…";
-    scanTimer=setTimeout(scanLoop,300);
-
-  }catch(e){
-    console.error(e);
-    stopCamera();
-    cameraStatus.classList.add("error");
-
-    if(e && e.name==="NotAllowedError"){
-      cameraStatus.textContent="カメラの使用が許可されていません";
-      helpText.textContent="Safariのサイト設定で「カメラ」を許可してから「カメラを再起動」を押してください。";
-    }else if(e && e.name==="NotFoundError"){
-      cameraStatus.textContent="使用できるカメラが見つかりません";
-    }else if(String(e && e.message)==="NOT_SECURE"){
-      cameraStatus.textContent="HTTPSではないためカメラを起動できません";
-    }else if(String(e && e.message)==="NO_GETUSERMEDIA"){
-      cameraStatus.textContent="このブラウザではカメラ起動に対応していません";
-      helpText.textContent="Safari本体でGitHub Pagesを開いてください。";
-    }else{
-      cameraStatus.textContent="カメラを起動できません";
-      helpText.textContent="Safari本体で開き直すか、カメラ権限を確認してください。";
-    }
-
-    retryCamera.classList.remove("hidden");
-  }finally{
-    cameraStarting=false;
-  }
+ if(cameraStarting)return;cameraStarting=true;stopCamera();currentMode=mode;lastCandidate="";lastCandidateAt=0;
+ candidate.textContent="-";helpText.textContent="";retryCamera.classList.add("hidden");completeOverlay.classList.remove("show");
+ if(mode==="code"){cameraTitle.textContent="コード確認";guide.textContent="QRコード全体を青枠内に入れてください";scanFrame.classList.add("code")}
+ else{cameraTitle.textContent="機種読み込み";guide.textContent="青枠にラベル全体（バーコード＋機種文字）を入れてください";scanFrame.classList.remove("code")}
+ showOnly(cameraScreen);cameraStatus.classList.remove("error");cameraStatus.textContent="カメラ起動中…";
+ try{
+  if(!window.isSecureContext)throw new Error("NOT_SECURE");
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false});
+  video.srcObject=stream;await video.play();await prepareBarcode();if(mode==="model")prepareOCR().catch(()=>{});
+  scanning=true;cameraStatus.textContent="🔍 高速読み取り中…";scanTimer=setTimeout(scanLoop,80);
+ }catch(e){
+  stopCamera();cameraStatus.classList.add("error");cameraStatus.textContent=e&&e.name==="NotAllowedError"?"カメラの使用が許可されていません":"カメラを起動できません";
+  helpText.textContent="Safariのカメラ権限とHTTPSを確認してください。";retryCamera.classList.remove("hidden");
+ }finally{cameraStarting=false}
 }
-
-function stopCamera(){
-  scanning=false;
-  busy=false;
-
-  if(scanTimer){
-    clearTimeout(scanTimer);
-    scanTimer=null;
-  }
-
-  if(stream){
-    stream.getTracks().forEach(t=>t.stop());
-    stream=null;
-  }
-
-  video.srcObject=null;
-}
-
+function stopCamera(){scanning=false;busy=false;if(scanTimer){clearTimeout(scanTimer);scanTimer=null}if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}video.srcObject=null}
 function prepareOCR(){
-  if(ocrReadyPromise)return ocrReadyPromise;
-  ocrReadyPromise=(async()=>{
-    ocrWorker=await Tesseract.createWorker("eng");
-    await ocrWorker.setParameters({
-      tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-      tessedit_pageseg_mode:"7",
-      preserve_interword_spaces:"0"
-    });
-    return ocrWorker;
-  })();
-  return ocrReadyPromise;
+ if(ocrReadyPromise)return ocrReadyPromise;
+ return ocrReadyPromise=(async()=>{ocrWorker=await Tesseract.createWorker("eng");await ocrWorker.setParameters({
+  tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",tessedit_pageseg_mode:"11",preserve_interword_spaces:"0"
+ });return ocrWorker})()
 }
-
 async function prepareBarcode(){
-  barcodeDetector=null;
-  if(!("BarcodeDetector" in window))return;
-  try{
-    const supported=await BarcodeDetector.getSupportedFormats();
-    const preferred=currentMode==="code"
-      ?["qr_code","data_matrix","code_128","code_39","code_93"]
-      :["code_128","code_39","code_93","qr_code","data_matrix"];
-    const formats=preferred.filter(f=>supported.includes(f));
-    barcodeDetector=new BarcodeDetector(formats.length?{formats}:undefined);
-  }catch(e){
-    barcodeDetector=null;
-  }
+ barcodeDetector=null;if(!("BarcodeDetector" in window))return;
+ try{const s=await BarcodeDetector.getSupportedFormats();const p=currentMode==="code"?["qr_code","data_matrix","code_128","code_39","code_93"]:["code_128","code_39","code_93","qr_code","data_matrix"];
+ const f=p.filter(x=>s.includes(x));barcodeDetector=new BarcodeDetector(f.length?{formats:f}:undefined)}catch(e){}
 }
-
-function normalizeText(text){
-  return String(text).toUpperCase().replace(/\s+/g,"").replace(/[^A-Z0-9]/g,"");
-}
-
-function extractModel(text){
-  const matches=normalizeText(text).match(MODEL_PATTERN);
-  if(!matches||!matches.length)return null;
-  matches.sort((a,b)=>b.length-a.length);
-  return matches[0];
-}
+function normalizeText(t){return String(t).toUpperCase().replace(/\s+/g,"").replace(/[^A-Z0-9]/g,"")}
+function extractModel(t){const m=normalizeText(t).match(MODEL_PATTERN);if(!m)return null;m.sort((a,b)=>b.length-a.length);return m[0]}
 
 async function scanLoop(){
-  if(!scanning||busy)return;
-
-  if(video.readyState<2){
-    scanTimer=setTimeout(scanLoop,300);
-    return;
-  }
-
-  busy=true;
-  try{
-    if(currentMode==="code"){
-      await readCode();
-    }else{
-      modelScanCount++;
-      const hit=await readModelBarcode();
-      /* OCRは重いので約1.6秒おき。バーコードが読めない場合でも文字で最終確定できる */
-      const now=Date.now();
-      if(!hit&&scanning&&(now-lastOcrAt>1600)){
-        lastOcrAt=now;
-        await readModelOCR();
-      }
-    }
-  }catch(e){
-    console.error(e);
-  }finally{
-    busy=false;
-    if(scanning)scanTimer=setTimeout(scanLoop,currentMode==="code"?120:300);
-  }
+ if(!scanning||busy)return;if(video.readyState<2){scanTimer=setTimeout(scanLoop,80);return}busy=true;
+ try{if(currentMode==="code")await readCode();else{const hit=await readModelBarcode();if(!hit&&scanning)await readModelOCR()}}catch(e){}
+ finally{busy=false;if(scanning)scanTimer=setTimeout(scanLoop,currentMode==="code"?70:90)}
 }
-
 async function readCode(){
-  /*
-    iPhone対策：
-    BarcodeDetectorに依存せず、まずjsQRで映像フレームを直接解析。
-    同じQR内容を2回読めた時だけ確定する。
-  */
-  const w=video.videoWidth;
-  const h=video.videoHeight;
-
-  if(!w||!h)return;
-
-  const maxW=900;
-  const scale=Math.min(1,maxW/w);
-  const outW=Math.max(1,Math.round(w*scale));
-  const outH=Math.max(1,Math.round(h*scale));
-
-  canvas.width=outW;
-  canvas.height=outH;
-
-  const ctx=canvas.getContext("2d",{willReadFrequently:true});
-  ctx.drawImage(video,0,0,w,h,0,0,outW,outH);
-
-  try{
-    if(typeof jsQR==="function"){
-      const image=ctx.getImageData(0,0,outW,outH);
-      const qr=jsQR(image.data,outW,outH,{
-        inversionAttempts:"attemptBoth"
-      });
-
-      if(qr && qr.data){
-        const value=String(qr.data).trim();
-
-        if(value){
-          candidate.textContent=value;
-          handleDetected(value,"QR");
-          return;
-        }
-      }
-    }
-  }catch(e){
-    console.error("jsQR",e);
-  }
-
-  /*
-    jsQRで見つからなかった場合だけ
-    BarcodeDetectorも使える端末では補助的に確認。
-  */
-  if(barcodeDetector){
-    try{
-      const results=await barcodeDetector.detect(video);
-
-      for(const r of results){
-        const value=String(r.rawValue||"").trim();
-
-        if(!value)continue;
-
-        candidate.textContent=value;
-        handleDetected(value,"QR/バーコード");
-        return;
-      }
-    }catch(e){}
-  }
-
-  cameraStatus.textContent="🔍 QRコードを読み取り中…";
+ const w=video.videoWidth,h=video.videoHeight;if(!w||!h)return;canvas.width=Math.min(w,1100);canvas.height=Math.round(h*(canvas.width/w));
+ const ctx=canvas.getContext("2d",{willReadFrequently:true});ctx.drawImage(video,0,0,w,h,0,0,canvas.width,canvas.height);
+ if(typeof jsQR==="function"){const im=ctx.getImageData(0,0,canvas.width,canvas.height),q=jsQR(im.data,canvas.width,canvas.height,{inversionAttempts:"attemptBoth"});
+ if(q&&q.data){detectFast(String(q.data).trim(),"QR");return}}
+ if(barcodeDetector){try{const rs=await barcodeDetector.detect(video);if(rs[0]&&rs[0].rawValue){detectFast(String(rs[0].rawValue).trim(),"コード");return}}catch(e){}}
+ cameraStatus.textContent="🔍 QRコードを読み取り中…"
 }
-function prepareZXing(){
-  if(zxingReader)return zxingReader;
-  try{
-    if(window.ZXing && ZXing.BrowserMultiFormatReader){
-      zxingReader=new ZXing.BrowserMultiFormatReader();
-    }
-  }catch(e){
-    zxingReader=null;
-  }
-  return zxingReader;
-}
-
-function drawModelZone(targetCanvas, zone, filter="none", rotation=0){
-  const w=video.videoWidth,h=video.videoHeight;
-  if(!w||!h)return false;
-
-  /* ラベル全体を広く見る。離して構えても拾えるように中央94%×82%を基本範囲にする */
-  const baseX=w*.03,baseY=h*.09,baseW=w*.94,baseH=h*.82;
-  const sx=baseX+baseW*zone.x;
-  const sy=baseY+baseH*zone.y;
-  const sw=baseW*zone.w;
-  const sh=baseH*zone.h;
-  const maxSide=1550;
-  const scale=Math.min(2.0,maxSide/Math.max(sw,sh));
-  const srcW=Math.max(1,Math.round(sw*scale));
-  const srcH=Math.max(1,Math.round(sh*scale));
-
-  const work=document.createElement("canvas");
-  work.width=srcW;
-  work.height=srcH;
-  const wctx=work.getContext("2d",{willReadFrequently:true});
-  wctx.filter=filter;
-  wctx.drawImage(video,sx,sy,sw,sh,0,0,srcW,srcH);
-  wctx.filter="none";
-
-  if(rotation===90||rotation===-90){
-    targetCanvas.width=srcH;
-    targetCanvas.height=srcW;
-    const ctx=targetCanvas.getContext("2d",{willReadFrequently:true});
-    ctx.save();
-    if(rotation===90){
-      ctx.translate(srcH,0);ctx.rotate(Math.PI/2);
-    }else{
-      ctx.translate(0,srcW);ctx.rotate(-Math.PI/2);
-    }
-    ctx.drawImage(work,0,0);
-    ctx.restore();
-  }else{
-    targetCanvas.width=srcW;
-    targetCanvas.height=srcH;
-    targetCanvas.getContext("2d",{willReadFrequently:true}).drawImage(work,0,0);
-  }
-  return true;
-}
-
-function applyBarcodeThreshold(targetCanvas, level=.52){
-  const ctx=targetCanvas.getContext("2d",{willReadFrequently:true});
-  const img=ctx.getImageData(0,0,targetCanvas.width,targetCanvas.height);
-  const d=img.data;
-  let min=255,max=0;
-  for(let i=0;i<d.length;i+=4){
-    const g=(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)|0;
-    if(g<min)min=g;if(g>max)max=g;
-    d[i]=d[i+1]=d[i+2]=g;
-  }
-  const span=Math.max(20,max-min);
-  const t=min+span*level;
-  for(let i=0;i<d.length;i+=4){
-    const v=d[i]>=t?255:0;
-    d[i]=d[i+1]=d[i+2]=v;
-  }
-  ctx.putImageData(img,0,0);
-}
-
-async function tryZXingCanvas(reader){
-  try{
-    const result=await reader.decodeFromCanvas(canvas);
-    const raw=result&&(result.getText?result.getText():result.text);
-    const model=extractModel(raw||"");
-    if(model)return model;
-  }catch(e){}
-  try{if(reader.reset)reader.reset();}catch(e){}
-  return null;
-}
-
-async function decodeModelWithZXing(){
-  const reader=prepareZXing();
-  if(!reader)return null;
-
-  /*
-    写真のような「横向き1Dバーコード」「2列印字」「薄い印字」「途中の白線」を想定。
-    - ラベル全体 / 左列 / 右列 / 上部を別々に解析
-    - 0度 / 90度 / -90度を試す
-    - 生画像 / 強コントラスト / 二値化を試す
-    白線が入っていても、別の帯・列・回転方向から復号できる可能性を上げる。
-  */
-  const zones={
-    full:{x:0,y:0,w:1,h:1},
-    upper:{x:.05,y:.03,w:.90,h:.72},
-    left:{x:.03,y:.03,w:.47,h:.72},
-    right:{x:.50,y:.03,w:.47,h:.72}
-  };
-  const passes=[
-    [zones.full,"grayscale(1) contrast(1.8)",90,null],
-    [zones.full,"grayscale(1) contrast(1.8)",-90,null],
-    [zones.left,"grayscale(1) contrast(2.3)",90,null],
-    [zones.right,"grayscale(1) contrast(2.3)",90,null],
-    [zones.left,"grayscale(1) contrast(2.3)",-90,null],
-    [zones.right,"grayscale(1) contrast(2.3)",-90,null],
-    [zones.upper,"grayscale(1) contrast(2.1)",90,.48],
-    [zones.upper,"grayscale(1) contrast(2.1)",90,.58],
-    [zones.full,"none",0,null],
-    [zones.full,"grayscale(1) contrast(2.0)",0,.52]
-  ];
-
-  for(const [zone,filter,rot,thr] of passes){
-    if(!scanning)return null;
-    if(!drawModelZone(canvas,zone,filter,rot))continue;
-    if(thr!==null)applyBarcodeThreshold(canvas,thr);
-    const model=await tryZXingCanvas(reader);
-    if(model)return model;
-  }
-  return null;
-}
-
 async function readModelBarcode(){
-  /* 端末標準APIはまず高速判定。向きが合えば即座に拾う */
-  if(barcodeDetector){
-    try{
-      const results=await barcodeDetector.detect(video);
-      for(const r of results){
-        const model=extractModel(r.rawValue||"");
-        if(model){
-          candidate.textContent=model;
-          handleDetected(model,"バーコード");
-          return true;
-        }
-      }
-    }catch(e){}
-  }
-
-  const zxingModel=await decodeModelWithZXing();
-  if(zxingModel){
-    candidate.textContent=zxingModel;
-    handleDetected(zxingModel,"横向き/薄バーコード強化");
-    return true;
-  }
-  return false;
+ if(!barcodeDetector)return false;
+ try{const rs=await barcodeDetector.detect(video);for(const r of rs){const m=extractModel(r.rawValue||"");if(m){candidate.textContent=m;detectFast(m,"バーコード");return true}}}catch(e){}
+ return false
 }
-
-function drawOCRZone(zone, filter="grayscale(1) contrast(1.7)"){
-  const w=video.videoWidth,h=video.videoHeight;
-  if(!w||!h)return false;
-  const baseX=w*.03,baseY=h*.09,baseW=w*.94,baseH=h*.82;
-  const sx=baseX+baseW*zone.x, sy=baseY+baseH*zone.y;
-  const sw=baseW*zone.w, sh=baseH*zone.h;
-  const scale=Math.min(2.2,1500/Math.max(sw,1));
-  canvas.width=Math.max(1,Math.round(sw*scale));
-  canvas.height=Math.max(1,Math.round(sh*scale));
-  const ctx=canvas.getContext("2d",{willReadFrequently:true});
-  ctx.filter=filter;
-  ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
-  ctx.filter="none";
-  return true;
-}
-
 async function readModelOCR(){
-  /* 最終値は機種文字で確定。写真のT629Cのようにラベル下部にある文字を優先し、全体も保険で見る */
-  const zones=[
-    {x:.03,y:.62,w:.94,h:.35},
-    {x:.02,y:.48,w:.96,h:.50},
-    {x:0,y:0,w:1,h:1}
-  ];
-  try{
-    const worker=await prepareOCR();
-    for(const z of zones){
-      if(!scanning)return;
-      if(!drawOCRZone(z))continue;
-      const result=await worker.recognize(canvas);
-      const model=extractModel(result.data.text||"");
-      if(model){
-        candidate.textContent=model;
-        handleDetected(model,"文字OCR最終確認");
-        return;
-      }
-    }
-    cameraStatus.textContent="🔍 文字・バーコードを広範囲で読み取り中…";
-  }catch(e){}
+ const w=video.videoWidth,h=video.videoHeight;if(!w||!h)return;
+ /* 広い青枠と同等の領域をOCR。ラベル下部の文字も拾う */
+ const x=w*.02,y=h*.12,cw=w*.96,ch=h*.76,scale=Math.min(1,1400/cw);
+ canvas.width=Math.round(cw*scale);canvas.height=Math.round(ch*scale);
+ const ctx=canvas.getContext("2d",{willReadFrequently:true});ctx.drawImage(video,x,y,cw,ch,0,0,canvas.width,canvas.height);
+ try{const worker=await prepareOCR();const result=await worker.recognize(canvas);const m=extractModel(result.data.text||"");
+ if(m){candidate.textContent=m;detectFast(m,"文字OCR")}}catch(e){}
 }
-
-function handleDetected(value,method){
-  if(value===previousValue)sameCount++;
-  else{
-    previousValue=value;
-    sameCount=1;
-  }
-
-  cameraStatus.textContent=`確認 ${Math.min(sameCount,2)} / 2`;
-
-  if(sameCount>=2){
-    confirmRead(value,method);
-  }
+/* 最速化：有効な機種文字を1回確実に取得した時点で確定。
+   直前候補が短時間に再検出された場合も即確定。 */
+function detectFast(value,method){
+ if(!value)return;const now=Date.now();candidate.textContent=value;
+ if(currentMode==="model" && !MODEL_PATTERN.test(value)){MODEL_PATTERN.lastIndex=0;return}
+ MODEL_PATTERN.lastIndex=0;
+ if(value===lastCandidate && now-lastCandidateAt<1200){confirmRead(value,method);return}
+ lastCandidate=value;lastCandidateAt=now;cameraStatus.textContent="✓ 読み取り確認";
+ /* 正規表現に合う文字/有効コードなら待たず確定 */
+ confirmRead(value,method)
 }
-
 function confirmRead(value,method){
-  scanning=false;
-  if(scanTimer){
-    clearTimeout(scanTimer);
-    scanTimer=null;
-  }
-
-  const now=new Date();
-
-  localStorage.setItem(
-    currentMode==="code"?CODE_KEY:MODEL_KEY,
-    JSON.stringify({
-      value,
-      method,
-      timeISO:now.toISOString(),
-      timeText:now.toLocaleString("ja-JP")
-    })
-  );
-
-  completeValue.textContent=value;
-  completeOverlay.classList.add("show");
-  cameraStatus.textContent="✅ 読み込み完了";
-
-  if(navigator.vibrate)navigator.vibrate(120);
-
-  setTimeout(showInspection,1300);
+ if(!scanning)return;scanning=false;if(scanTimer){clearTimeout(scanTimer);scanTimer=null}
+ const now=new Date();localStorage.setItem(currentMode==="code"?CODE_KEY:MODEL_KEY,JSON.stringify({value,method,timeISO:now.toISOString(),timeText:now.toLocaleString("ja-JP")}));
+ completeValue.textContent=value;completeOverlay.classList.add("show");cameraStatus.textContent="✅ 読み込み完了";if(navigator.vibrate)navigator.vibrate(80);
+ setTimeout(showInspection,350)
 }
 </script>
 </body>
